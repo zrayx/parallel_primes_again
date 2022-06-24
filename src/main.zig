@@ -106,64 +106,6 @@ fn time_diff() i64 {
     return std.time.milliTimestamp() - timer;
 }
 
-fn p10_thread(primes: *Primes, start: u64, end: u64, list: *std.ArrayList(u64)) !void {
-    return primes.prime_slice_thread(start, end, list);
-}
-
-// memoization in 1 thread
-fn p10(max_prime: u64) !void {
-    timer = std.time.milliTimestamp();
-
-    var sum: u64 = 6;
-    var primes = try Primes.init();
-    defer primes.deinit();
-
-    const STEP_SIZE: u64 = 6000000;
-    const MAX_THREADS: u64 = 32;
-    const THREADS: u64 = 32;
-
-    var last: u64 = 15; // primes up to 13 are already stored
-    var list: [MAX_THREADS]std.ArrayList(u64) = undefined;
-    var threads: [MAX_THREADS]std.Thread = undefined;
-
-    var i: usize = 0;
-    while (i < MAX_THREADS) : (i += 1) {
-        list[i] = std.ArrayList(u64).init(croc);
-    }
-
-    while (last < max_prime) {
-        const step_to_max = max((max_prime - last) / THREADS, 50);
-        const step_root = (last * last - last) / THREADS;
-        const step = max(min(min(step_to_max, step_root), STEP_SIZE), 40) & 0xfffffffffffffffe;
-        i = 0;
-        while (i < THREADS) : (i += 1) {
-            try list[i].resize(0);
-            threads[i] = try std.Thread.spawn(.{}, p9_thread, .{ &primes, last, last + step, &list[i] });
-            last = min(last + step, max_prime + 2 - step);
-        }
-
-        i = 0;
-        while (i < THREADS) : (i += 1) {
-            threads[i].join();
-            sum += list[i].items.len;
-        }
-
-        i = 0;
-        while (i < THREADS) : (i += 1) {
-            try primes.prime_slice_store(list[i].items);
-        }
-
-        last = primes.last();
-    }
-
-    std.debug.print("P10: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_diff(), sum, max_prime });
-
-    i = 0;
-    for (list) |j| {
-        j.deinit();
-    }
-}
-
 fn p9_thread(primes: *Primes, start: u64, end: u64, list: *std.ArrayList(u64)) !void {
     return primes.prime_slice_thread(start, end, list);
 }
@@ -322,8 +264,7 @@ fn p1(max_prime: u64) void {
 }
 
 pub fn main() anyerror!void {
-    const num = 3_000_000;
-    try p10(num);
+    const num = 30_000_000;
     try p9(num);
     try p6(num);
     try p5(num);
