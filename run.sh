@@ -19,7 +19,7 @@ zig build run -Drelease-safe
 echo --------------------------------------------------------------------------------
 
 #echo --------------------------------------------------------------------------------
-inotifywait --format %w -q -e close_write src/*.zig build.zig run.sh run2.sh
+inotifywait --format %w -q -e close_write src/*.zig build.zig run.sh
 
 
 exec ./run.sh

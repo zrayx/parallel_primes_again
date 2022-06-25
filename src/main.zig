@@ -1,5 +1,6 @@
 const std = @import("std");
-const croc = std.testing.allocator;
+//const croc = std.mem.allocator;
+const croc = std.heap.page_allocator;
 const dbg = std.debug.print;
 
 const Primes = struct {
@@ -104,6 +105,115 @@ const Primes = struct {
 var timer: i64 = undefined;
 fn time_diff() i64 {
     return std.time.milliTimestamp() - timer;
+}
+
+fn primes_slice(list: []bool, slice_size: usize, start: usize, end: usize) void {
+    var i: usize = 2;
+    while (i < slice_size) : (i += 1) {
+        if (list[i]) {
+            var j = (start + i - 1) / i * i;
+            while (j < end) : (j += i) {
+                list[j] = false;
+            }
+        }
+    }
+}
+
+const PrimeError = error{
+    SomeError,
+};
+
+fn recursive_primes(list: []bool, thread_count: usize, max_prime: usize) PrimeError!usize {
+    const slice_size = (max_prime + thread_count) / (thread_count + 1);
+
+    // at what point is it safe to split the list?
+    // sqrt(max_prime) needs to be bigger than the slice size
+    // otherwise use a single thread
+    if (max_prime <= slice_size * slice_size) {
+        return sieve(list, max_prime);
+    }
+
+    var sum: usize = 0;
+    // make sure primes up to sqrt(max_prime) are calculated
+    sum += try recursive_primes(list, thread_count, slice_size);
+
+    var threads = std.ArrayList(std.Thread).init(croc);
+    defer threads.deinit();
+
+    var idx: usize = 0;
+    while (idx < thread_count) : (idx += 1) {
+        const start = (idx + 1) * slice_size;
+        const end = min(start + slice_size, max_prime + 1);
+        threads.append(std.Thread.spawn(.{}, primes_slice, .{ list, slice_size, start, end }) catch {
+            return PrimeError.SomeError;
+        }) catch {
+            return PrimeError.SomeError;
+        };
+    }
+
+    for (threads.items) |thread| {
+        thread.join();
+    }
+
+    var i = slice_size;
+    while (i <= max_prime) : (i += 1) {
+        if (list[i]) sum += 1;
+    }
+
+    return sum;
+}
+
+// Sieve, multithreaded
+fn p13(max_prime: u64) !void {
+    var thread_count: usize = 1;
+    while (thread_count <= 32) : (thread_count *= 2) {
+        timer = std.time.milliTimestamp();
+        var list = try croc.alloc(bool, max_prime + 1);
+        for (list) |_, i| {
+            list[i] = true;
+        }
+
+        const sum = try recursive_primes(list, thread_count, max_prime + 1);
+
+        std.debug.print("P13, Time elapsed: {}, sum: {}, max_prime: {}, thread_count: {}\n", .{ time_diff(), sum, max_prime, thread_count });
+    }
+}
+
+// returns the number of primes
+fn sieve(list: []bool, max_prime: usize) usize {
+    list[0] = false;
+    list[1] = false;
+
+    var i: usize = 0;
+    var sum: usize = 0;
+    while (i * i <= max_prime) : (i += 1) {
+        if (list[i]) {
+            sum += 1;
+            var j = i;
+            while (j < max_prime) : (j += i) {
+                list[j] = false;
+            }
+        }
+    }
+    // sum up the rest, save an "if" compared to the while above
+    while (i < max_prime) : (i += 1) {
+        if (list[i]) sum += 1;
+    }
+
+    return sum;
+}
+
+// Sieve of Eratosthenes
+fn p10(max_prime: u64) !void {
+    timer = std.time.milliTimestamp();
+    var list = try croc.alloc(bool, max_prime + 1);
+    for (list) |_, i| {
+        list[i] = true;
+    }
+
+    const sum = sieve(list, max_prime);
+
+    std.debug.print("P10: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_diff(), sum, max_prime });
 }
 
 fn p9_thread(primes: *Primes, start: u64, end: u64, list: *std.ArrayList(u64)) !void {
@@ -264,12 +374,21 @@ fn p1(max_prime: u64) void {
 }
 
 pub fn main() anyerror!void {
-    const num = 30_000_000;
-    try p9(num);
-    try p6(num);
-    try p5(num);
-    try p3(num);
-    p1(num);
+    // const num = 3_000_000_000;
+    const num = 300_000_000;
+    // const num = 30_000_000;
+    // const num = 3_000_000;
+    // const num = 300;
+    dbg("starting...\n", .{});
+    try p13(num);
+    try p10(num);
+    if (false) {
+        try p9(num);
+        try p6(num);
+        try p5(num);
+        try p3(num);
+        p1(num);
+    }
 }
 
 test "basic test" {
