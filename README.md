@@ -1,6 +1,6 @@
 # parallel_primes
 
-Parallelization of threads, and comparison of Rust vs Zig performance. This readme should be the same between the Zig and Rust projects.
+Parallelization of threads, and comparison of Rust vs Zig coding experience. This readme should be the same between the Zig and Rust projects.
 
 Rust implementation: https://github.com/zrayx/parallel
 

@@ -15,6 +15,7 @@ ps -u $USER -eo comm | grep -wq $prog && {
 
 zig fmt build.zig src/*.zig
 zig build run -Drelease-safe
+#zig build run
 #zig build test
 echo --------------------------------------------------------------------------------
 

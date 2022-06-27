@@ -107,9 +107,10 @@ fn time_diff() i64 {
     return std.time.milliTimestamp() - timer;
 }
 
-fn primes_slice(list: []bool, slice_size: usize, start: usize, end: usize) void {
+fn primes_slice_p14(list: []bool, seed_end: usize, start: usize, end: usize) void {
     var i: usize = 2;
-    while (i < slice_size) : (i += 1) {
+    var counter: usize = 0;
+    while (i < seed_end) : (i += 1) {
         if (list[i]) {
             var j = (start + i - 1) / i * i;
             while (j < end) : (j += i) {
@@ -117,46 +118,150 @@ fn primes_slice(list: []bool, slice_size: usize, start: usize, end: usize) void 
             }
         }
     }
+    i = start;
+    while (i < end) : (i += 1) {
+        if (list[i]) counter += 1;
+    }
+    // dbg("seed_end: {d}, start: {d}, end: {d}, counter: {d}\n", .{ seed_end, start, end, counter });
 }
 
-const PrimeError = error{
-    SomeError,
-};
-
-fn recursive_primes(list: []bool, thread_count: usize, max_prime: usize) PrimeError!usize {
-    const slice_size = (max_prime + thread_count) / (thread_count + 1);
-
-    // at what point is it safe to split the list?
-    // sqrt(max_prime) needs to be bigger than the slice size
-    // otherwise use a single thread
-    if (max_prime <= slice_size * slice_size) {
-        return sieve(list, max_prime);
+// max_prime is exclusive the wanted maximum prime number (other than the name suggests)
+fn recursive_primes_p14(list: []bool, thread_count: usize, max_prime: usize, page_size: usize) std.Thread.SpawnError!usize {
+    if (max_prime < page_size) {
+        return sieve(list, max_prime - 1);
     }
 
-    var sum: usize = 0;
+    var seed_end: usize = undefined;
+
     // make sure primes up to sqrt(max_prime) are calculated
-    sum += try recursive_primes(list, thread_count, slice_size);
-
-    var threads = std.ArrayList(std.Thread).init(croc);
-    defer threads.deinit();
-
-    var idx: usize = 0;
-    while (idx < thread_count) : (idx += 1) {
-        const start = (idx + 1) * slice_size;
-        const end = min(start + slice_size, max_prime + 1);
-        threads.append(std.Thread.spawn(.{}, primes_slice, .{ list, slice_size, start, end }) catch {
-            return PrimeError.SomeError;
-        }) catch {
-            return PrimeError.SomeError;
-        };
+    // recursively call self if needed
+    var sum: usize = 0;
+    if (max_prime > page_size * page_size) {
+        seed_end = (max_prime + 1) / thread_count / 8;
+        seed_end = seed_end - seed_end % page_size;
+        sum += try recursive_primes_p14(list, thread_count, seed_end, page_size);
+    } else {
+        seed_end = page_size;
+        sum += sieve(list, seed_end - 1);
     }
 
-    for (threads.items) |thread| {
-        thread.join();
+    var threads: [32]std.Thread = undefined;
+
+    var slice_size = (max_prime + 1) / thread_count / 8;
+    slice_size = page_size + slice_size - slice_size % page_size;
+    var start = seed_end;
+
+    while (true) {
+        var idx: usize = 0;
+        while (idx < thread_count) : (idx += 1) {
+            const end = min(start + slice_size, max_prime);
+            // o.k. to call this with start == end
+            threads[idx] = try std.Thread.spawn(.{}, primes_slice_p13, .{ list, seed_end, start, end });
+            // primes_slice_p13(list, seed_end, start, end);
+            start = end;
+        }
+
+        idx = 0;
+        while (idx < thread_count) : (idx += 1) {
+            threads[idx].join();
+        }
+        if (start == max_prime) {
+            break;
+        }
     }
 
-    var i = slice_size;
-    while (i <= max_prime) : (i += 1) {
+    var i = seed_end;
+    while (i < max_prime) : (i += 1) {
+        if (list[i]) sum += 1;
+    }
+
+    return sum;
+}
+
+// Sieve, multithreaded
+fn p14(max_prime: u64) !void {
+    var thread_count: usize = 4;
+    while (thread_count <= 32) : (thread_count += 4) {
+        var page_size: usize = 8192;
+        while (page_size <= 8192) : (page_size *= 2) {
+            timer = std.time.milliTimestamp();
+            var list = try croc.alloc(bool, max_prime + 1);
+            for (list) |_, i| {
+                list[i] = true;
+            }
+
+            const sum = try recursive_primes_p14(list, thread_count, max_prime + 1, page_size);
+
+            std.debug.print("P14, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size });
+        }
+    }
+}
+
+fn primes_slice_p13(list: []bool, seed_end: usize, start: usize, end: usize) void {
+    var i: usize = 2;
+    var counter: usize = 0;
+    while (i < seed_end) : (i += 1) {
+        if (list[i]) {
+            var j = (start + i - 1) / i * i;
+            while (j < end) : (j += i) {
+                list[j] = false;
+            }
+        }
+    }
+    i = start;
+    while (i < end) : (i += 1) {
+        if (list[i]) counter += 1;
+    }
+    // dbg("seed_end: {d}, start: {d}, end: {d}, counter: {d}\n", .{ seed_end, start, end, counter });
+}
+
+// max_prime is exclusive the wanted maximum prime number (other than the name suggests)
+fn recursive_primes_p13(list: []bool, thread_count: usize, max_prime: usize, page_size: usize) std.Thread.SpawnError!usize {
+    if (max_prime < page_size) {
+        return sieve(list, max_prime - 1);
+    }
+
+    var seed_end: usize = undefined;
+
+    // make sure primes up to sqrt(max_prime) are calculated
+    // recursively call self if needed
+    var sum: usize = 0;
+    if (max_prime > page_size * page_size) {
+        seed_end = (max_prime + 1) / thread_count / 8;
+        seed_end = seed_end - seed_end % page_size;
+        sum += try recursive_primes_p13(list, thread_count, seed_end, page_size);
+    } else {
+        seed_end = page_size;
+        sum += sieve(list, seed_end - 1);
+    }
+
+    var threads: [32]std.Thread = undefined;
+
+    var slice_size = (max_prime + 1) / thread_count / 8;
+    slice_size = page_size + slice_size - slice_size % page_size;
+    var start = seed_end;
+
+    while (true) {
+        var idx: usize = 0;
+        while (idx < thread_count) : (idx += 1) {
+            const end = min(start + slice_size, max_prime);
+            // o.k. to call this with start == end
+            threads[idx] = try std.Thread.spawn(.{}, primes_slice_p13, .{ list, seed_end, start, end });
+            // primes_slice_p13(list, seed_end, start, end);
+            start = end;
+        }
+
+        idx = 0;
+        while (idx < thread_count) : (idx += 1) {
+            threads[idx].join();
+        }
+        if (start == max_prime) {
+            break;
+        }
+    }
+
+    var i = seed_end;
+    while (i < max_prime) : (i += 1) {
         if (list[i]) sum += 1;
     }
 
@@ -165,17 +270,20 @@ fn recursive_primes(list: []bool, thread_count: usize, max_prime: usize) PrimeEr
 
 // Sieve, multithreaded
 fn p13(max_prime: u64) !void {
-    var thread_count: usize = 1;
-    while (thread_count <= 32) : (thread_count *= 2) {
-        timer = std.time.milliTimestamp();
-        var list = try croc.alloc(bool, max_prime + 1);
-        for (list) |_, i| {
-            list[i] = true;
+    var thread_count: usize = 32;
+    while (thread_count <= 32) : (thread_count += 4) {
+        var page_size: usize = 8192;
+        while (page_size <= 8192) : (page_size *= 2) {
+            timer = std.time.milliTimestamp();
+            var list = try croc.alloc(bool, max_prime + 1);
+            for (list) |_, i| {
+                list[i] = true;
+            }
+
+            const sum = try recursive_primes_p13(list, thread_count, max_prime + 1, page_size);
+
+            std.debug.print("P13, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size });
         }
-
-        const sum = try recursive_primes(list, thread_count, max_prime + 1);
-
-        std.debug.print("P13, Time elapsed: {}, sum: {}, max_prime: {}, thread_count: {}\n", .{ time_diff(), sum, max_prime, thread_count });
     }
 }
 
@@ -184,13 +292,13 @@ fn sieve(list: []bool, max_prime: usize) usize {
     list[0] = false;
     list[1] = false;
 
-    var i: usize = 0;
+    var i: usize = 2;
     var sum: usize = 0;
     while (i * i <= max_prime) : (i += 1) {
         if (list[i]) {
             sum += 1;
-            var j = i;
-            while (j < max_prime) : (j += i) {
+            var j = i + i;
+            while (j <= max_prime) : (j += i) {
                 list[j] = false;
             }
         }
@@ -213,7 +321,7 @@ fn p10(max_prime: u64) !void {
 
     const sum = sieve(list, max_prime);
 
-    std.debug.print("P10: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_diff(), sum, max_prime });
+    std.debug.print("P10: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_diff(), sum, print_num(max_prime) });
 }
 
 fn p9_thread(primes: *Primes, start: u64, end: u64, list: *std.ArrayList(u64)) !void {
@@ -266,7 +374,7 @@ fn p9(max_prime: u64) !void {
         last = primes.last();
     }
 
-    std.debug.print("P9: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_diff(), sum, max_prime });
+    std.debug.print("P9: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_diff(), sum, print_num(max_prime) });
 
     i = 0;
     for (list) |j| {
@@ -307,7 +415,7 @@ fn p6(max_prime: u64) !void {
     }
 
     var time_elapsed = std.time.milliTimestamp() - time_start;
-    std.debug.print("P6: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_elapsed, sum, max_prime });
+    std.debug.print("P6: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_elapsed, sum, print_num(max_prime) });
 }
 
 fn p5(max_prime: u64) !void {
@@ -333,7 +441,7 @@ fn p5(max_prime: u64) !void {
     }
 
     var time_elapsed = std.time.milliTimestamp() - time_start;
-    std.debug.print("P5: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_elapsed, sum, max_prime });
+    std.debug.print("P5: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_elapsed, sum, print_num(max_prime) });
 }
 
 fn min(a: u64, b: u64) u64 {
@@ -357,7 +465,7 @@ fn p3(max_prime: u64) !void {
     }
 
     var time_elapsed = std.time.milliTimestamp() - time_start;
-    std.debug.print("P3: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_elapsed, sum, max_prime });
+    std.debug.print("P3: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_elapsed, sum, print_num(max_prime) });
 }
 
 fn p1(max_prime: u64) void {
@@ -370,19 +478,37 @@ fn p1(max_prime: u64) void {
     }
 
     var time_elapsed = std.time.milliTimestamp() - time_start;
-    std.debug.print("P1: Time elapsed: {}, sum: {}, max_prime: {}\n", .{ time_elapsed, sum, max_prime });
+    std.debug.print("P1: Time elapsed: {}, sum: {}, max_prime: {s}\n", .{ time_elapsed, sum, print_num(max_prime) });
+}
+
+var line: std.ArrayList(u8) = undefined;
+fn print_num(n: usize) ![]const u8 {
+    try line.resize(0);
+    if (n > 10_000_000_000) {
+        try line.writer().print("{d}G", .{n / 1_000_000_000});
+    } else if (n > 10_000_000) {
+        try line.writer().print("{d}M", .{n / 1_000_000});
+    } else if (n > 10_000) {
+        try line.writer().print("{d}K", .{n / 1_000});
+    } else {
+        try line.writer().print("{d}", .{n});
+    }
+    return line.items;
 }
 
 pub fn main() anyerror!void {
+    line = std.ArrayList(u8).init(croc);
+    defer line.deinit();
     // const num = 3_000_000_000;
     const num = 300_000_000;
     // const num = 30_000_000;
     // const num = 3_000_000;
     // const num = 300;
     dbg("starting...\n", .{});
+    if (false) try p14(num);
     try p13(num);
     try p10(num);
-    if (false) {
+    if (true) {
         try p9(num);
         try p6(num);
         try p5(num);
