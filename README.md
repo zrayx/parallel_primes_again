@@ -28,18 +28,17 @@ Zig cons:
 
 Performance
 ===========
-Zig is a bit slower than Rust when using the exact same algorithms. However, being unsafe allowed for more efficient algorithms in this test, so in the end Zig was a lot faster.
+Zig is a bit slower than Rust when using the exact same algorithms, even when I had to copy data around in Rust to make the borrow checker happy.
 
 Overview shown in zspread (https://github.com/zrayx/zspread):
 
-<img src="img/overview_p15.png" />
+<img src="img/overview.png" />
 
 Notable implementations:
 
 * P1 - naive implementation
 * P3 - memoization
 * P8/P9 - memoization, multiple threads
-* P10 - Sieve of Eratosthenes, single thread, one byte per bool
-* P12/P13 - Sieve of Eratosthenes, many threads. Unfortunately doesn't scale in either Rust or Zig. I'm guessing that the memory is the bottleneck.
-* P11 - Sieve in Rust, single thread
-* P15 - Sieve in Zig, >= 16 threads
+* P10/P11 - Sieve of Eratosthenes, single thread, one byte per boolean
+* P16/P13 - Sieve of Eratosthenes, many threads
+* P17/P15 - Sieve with packed bits (64 bits in an u64), multi threaded

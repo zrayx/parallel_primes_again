@@ -265,8 +265,8 @@ fn p15(max_prime: u64) !void {
     var bits = try Bits.init(croc, max_prime + 1, true);
     var thread_count: usize = 32;
     while (thread_count <= 32) : (thread_count += 4) {
-        var page_size: usize = 4096 * 2;
-        while (page_size <= 8192 * 64) : (page_size *= 2) {
+        var page_size: usize = 128 * 1024;
+        while (page_size <= 128 * 1024) : (page_size *= 2) {
             timer = std.time.milliTimestamp();
 
             const sum = try recursive_primes_p15(&bits, thread_count, max_prime + 1, page_size);
@@ -353,7 +353,7 @@ fn recursive_primes_p14(list: []bool, thread_count: usize, max_prime: usize, pag
     return sum;
 }
 
-// Sieve, multithreaded
+// As p13, but single pages
 fn p14(max_prime: u64) !void {
     var thread_count: usize = 32;
     while (thread_count <= 32) : (thread_count *= 2) {
@@ -367,7 +367,7 @@ fn p14(max_prime: u64) !void {
 
             const sum = try recursive_primes_p14(list, thread_count, max_prime + 1, page_size);
 
-            std.debug.print("P14, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size });
+            std.debug.print("P14, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}k\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size / 1024 });
         }
     }
 }
@@ -443,7 +443,7 @@ fn recursive_primes_p13(list: []bool, thread_count: usize, max_prime: usize, pag
     return sum;
 }
 
-// Sieve, multithreaded
+// Sieve, multithreaded, (multi-)page aligned
 fn p13(max_prime: u64) !void {
     var thread_count: usize = 32;
     while (thread_count <= 32) : (thread_count += 4) {
@@ -457,7 +457,7 @@ fn p13(max_prime: u64) !void {
 
             const sum = try recursive_primes_p13(list, thread_count, max_prime + 1, page_size);
 
-            std.debug.print("P13, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size });
+            std.debug.print("P13, Time elapsed: {}, sum: {}, max_prime: {s}, thread_count: {}, page_size: {}k\n", .{ time_diff(), sum, print_num(max_prime), thread_count, page_size / 1024 });
         }
     }
 }
@@ -674,13 +674,14 @@ fn print_num(n: usize) ![]const u8 {
 pub fn main() anyerror!void {
     line = std.ArrayList(u8).init(croc);
     defer line.deinit();
-    // const num = 3_000_000_000;
+    const num = 3_000_000_000;
     // const num = 300_000_000;
     // const num = 30_000_000;
-    const num = 3_000_000;
+    // const num = 3_000_000;
     // const num = 300;
     dbg("starting...\n", .{});
     try p15(num);
+    try p14(num);
     try p13(num);
     try p10(num);
     if (num <= 3_000_000) {
