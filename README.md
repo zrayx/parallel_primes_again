@@ -39,6 +39,6 @@ Notable implementations:
 * P1 - naive implementation
 * P3 - memoization
 * P8/P9 - memoization, multiple threads
-* P10/P11 - Sieve of Eratosthenes, single thread, one byte per boolean
+* P10 - Sieve of Eratosthenes, single thread, one byte per boolean
 * P16/P13 - Sieve of Eratosthenes, many threads
 * P17/P15 - Sieve with packed bits (64 bits in an u64), multi threaded
